@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="tet">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#123d3b" />
+  <title>Hamutuk Saúde · Komunikasaun no koordenasaun</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-lockup" aria-label="Inisiu Hamutuk Saúde">
+        <div class="brand-mark" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </div>
+        <div>
+          <div class="brand-name">Hamutuk Saúde</div>
+          <div class="brand-caption">komunikasaun no koordenasaun</div>
+        </div>
+      </div>
+
+      <div class="mode-switch" aria-label="Hili haree protótipu">
+        <button class="mode-button" data-mode="community">Aplikasaun komunidade</button>
+        <button class="mode-button active" data-mode="service">Servisu saúde</button>
+      </div>
+
+      <div class="topbar-actions">
+        <button class="connection-control" id="networkToggle" data-action="toggle-network" type="button">
+          <span class="connection-dot"></span>
+          <span data-network-label>Ezemplu bainhira la iha koneksaun</span>
+        </button>
+        <button class="icon-button top-help" data-action="open-help" type="button" aria-label="Loke nota protótipu">?</button>
+        <div class="user-avatar" aria-label="Utilizadór ezemplu">D</div>
+      </div>
+    </header>
+
+    <main id="app" tabindex="-1"></main>
+  </div>
+
+  <div id="modalRoot" aria-live="polite"></div>
+  <div id="toastRoot" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
