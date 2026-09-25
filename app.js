@@ -38,7 +38,7 @@ const laneMeta = {
 };
 
 const state = {
-  mode: 'community',
+  mode: 'service',
   online: false,
   selectedRequest: 'req-4',
   activeFilter: 'Pedidu hotu',
@@ -198,6 +198,12 @@ function getRequest(key) {
   return state.requests.find((request) => request.key === key) || state.requests[0];
 }
 
+function touchRequest(request) {
+  if (!request) return;
+  request.updatedAt = Date.now();
+  request.lastUpdated = 'Agora daudaun';
+}
+
 function statusPill(label, tone = 'neutral') {
   return `<span class="pill ${h(tone)}">${h(label)}</span>`;
 }
@@ -322,13 +328,76 @@ function matchesServiceFilter(request) {
   return true;
 }
 
+function serviceRequestPriority(request) {
+  const emergency = request.lane === 'emergency' ? 1 : 0;
+  const waiting = ['Simu ona — hein revizaun', 'Presiza informasaun liután', 'Presiza resposta', 'Revisaun iha prosesu'].includes(request.status) ? 1 : 0;
+  return { emergency, waiting, updated: request.updatedAt || 0 };
+}
+
 function filteredRequests() {
   const query = state.search.trim().toLowerCase();
   return state.requests.filter((request) => {
     if (!matchesServiceFilter(request)) return false;
     if (!query) return true;
     return [request.id, request.title, request.location, request.requester, request.status].join(' ').toLowerCase().includes(query);
+  }).sort((a, b) => {
+    const aPriority = serviceRequestPriority(a);
+    const bPriority = serviceRequestPriority(b);
+    return bPriority.emergency - aPriority.emergency
+      || bPriority.waiting - aPriority.waiting
+      || bPriority.updated - aPriority.updated;
   });
+}
+
+function serviceOriginalRequestMarkup(request, meta) {
+  const fields = [
+    ['Tipu pedidu', meta.label],
+    ['Husi', request.requester || 'Membru komunidade'],
+    ['Fatin / komunidade', request.location],
+    ['Rejistu orijinal', request.created || request.time || 'Agora daudaun'],
+    request.fullName ? ['Naran kompletu', request.fullName] : null,
+    request.assistedName ? ['Ema ne’ebé Autoridade asiste', request.assistedName] : null,
+    request.contact ? ['Numeru telefone kontaktu', request.contact] : null,
+    request.pregnancyInfo ? ['Informasaun maternidade', request.pregnancyInfo] : null,
+    request.preferredTime ? ['Tempu preferidu', request.preferredTime] : null,
+    request.affectedCount ? ['Ema afetadu', request.affectedCount] : null,
+    request.resourceName ? ['Naran aimoruk', request.resourceName] : null
+  ].filter(Boolean);
+  return `<section class="service-original-request"><div class="service-section-heading"><div><span class="eyebrow">Informasaun la bele muda</span><h3>Pedidu orijinal</h3></div><span class="immutable-mark" title="Informasaun orijinal la bele muda">▣</span></div><div class="service-original-quote"><label>Liafuan husi komunidade</label><p>“${h(request.quote || request.summary || 'Pedidu rejistadu.') }”</p></div><div class="service-original-fields">${fields.map(([label, value]) => `<div><label>${h(label)}</label><strong>${h(value)}</strong></div>`).join('')}</div></section>`;
+}
+
+function serviceStatusExplanation(request) {
+  const explanations = {
+    'Rai iha dispozitivu — seidauk haruka': 'Pedidu rai iha dispozitivu komunidade no seidauk haruka ba servisu saúde.',
+    'Hein sincronizasaun': 'Pedidu hein sincronizasaun; servisu saúde seidauk bele konsidera nia simu ona.',
+    'Haruka ba servisu saúde': 'Pedidu haruka ona ba servisu saúde, maibé konfirmasaun simu no revizaun seidauk kompletu.',
+    'Simu ona — hein revizaun': 'Servisu saúde simu pedidu no agora hein revizaun husi ema responsavel.',
+    'Presiza informasaun liután': 'Servisu saúde husu informasaun liután no hein resposta husi komunidade.',
+    'Resposta haruka ona — hein revizaun': 'Resposta husi komunidade haruka ona no hein revizaun husi servisu saúde.',
+    'Resposta disponivel': 'Resposta servisu saúde disponivel ona ba komunidade.',
+    'Resposta fahe ona': 'Resposta servisu saúde fahe ona ba komunidade no rai iha istória.',
+    'Referénsia rejistada': 'Referénsia servisu rejista ona iha istória pedidu.'
+  };
+  return explanations[request.status] || 'Status pedidu hatudu iha leten; pasu tuir mai sei depende ba konfirmasaun servisu saúde.';
+}
+
+function serviceNextActionMarkup(request) {
+  if (request.status === 'Presiza informasaun liután' && (!request.communityReply || request.replyStatus === 'Rai iha dispozitivu — seidauk haruka')) {
+    return `<button class="btn primary" data-action="focus-service-response" data-kind="Presiza informasaun liután" type="button">Husu informasaun liután <span class="arrow">→</span></button>`;
+  }
+  if (request.status === 'Resposta disponivel' || request.status === 'Resposta fahe ona' || request.status === 'Referénsia rejistada') {
+    return `<button class="btn secondary" data-action="focus-service-response" data-kind="Resposta servisu" type="button">Atualiza resposta <span class="arrow">→</span></button>`;
+  }
+  if (['Rai iha dispozitivu — seidauk haruka', 'Hein sincronizasaun'].includes(request.status)) {
+    return `<span class="service-action-note">Hein sincronizasaun molok servisu bele halo revizaun.</span>`;
+  }
+  return `<button class="btn primary" data-action="focus-service-response" data-kind="Resposta servisu" type="button">Fahe resposta <span class="arrow">→</span></button>`;
+}
+
+function serviceEmptyState() {
+  const filter = state.activeFilter;
+  const filterText = filter === 'Pedidu hotu' ? 'haree ida-ne’e' : `filtru “${filter}”`;
+  return `<div class="service-empty-state"><span class="service-empty-icon">⌁</span><strong>La iha pedidu iha ${h(filterText)}</strong><p>Bainhira iha pedidu foun ka status muda, sira sei mosu iha fila ida-ne’e.</p>${filter !== 'Pedidu hotu' ? '<button class="btn secondary" data-action="set-filter" data-filter="Pedidu hotu" type="button">Haree pedidu hotu</button>' : ''}</div>`;
 }
 
 function serviceMetricData() {
@@ -344,180 +413,129 @@ function serviceMetricData() {
   ];
 }
 
+function requestAuthorityLabel(request) {
+  const requester = String(request?.requester || '');
+  if (request?.requesterType === 'Autoridade Komunidade' || requester.startsWith('Halo husi Autoridade Komunidade')) return requester;
+  return '';
+}
+
+function compactRequestSummary(request) {
+  const text = request.status === 'Presiza informasaun liután' && request.moreInfoQuestion
+    ? `Servisu saúde husu: ${request.moreInfoQuestion}`
+    : String(request.summary || request.quote || 'Pedidu rejistadu.');
+  return text.length > 125 ? `${text.slice(0, 122).trim()}…` : text;
+}
+
+function serviceResponseComposerMarkup(request, defaultMessage) {
+  return `<details class="service-response-details" id="serviceResponseComposer"><summary>Rejista resposta</summary><div class="service-response-details-body"><div class="response-types">${['Resposta servisu', 'Presiza informasaun liután', 'Referénsia rejistada', 'Atualizasaun rekursu'].map((kind) => `<button class="response-type ${state.responseKind === kind ? 'active' : ''}" data-action="set-response-kind" data-kind="${h(kind)}" type="button">${h(kind)}</button>`).join('')}</div>${request.lane === 'maternity' ? `<div class="structured-response-row demo-response-category-row"><span>Kategoria resposta maternidade:</span><button class="response-type ${state.demoStory.responseCategory === 'Bele simu / avalia' ? 'active' : ''}" data-action="set-demo-response-category" data-category="Bele simu / avalia" type="button">Bele simu / avalia</button><button class="response-type ${state.demoStory.responseCategory === 'Presiza informasaun liután' ? 'active' : ''}" data-action="set-demo-response-category" data-category="Presiza informasaun liután" type="button">Presiza informasaun liután</button><button class="response-type ${state.demoStory.responseCategory === 'Servisu temporariamente la disponivel' ? 'active' : ''}" data-action="set-demo-response-category" data-category="Servisu temporariamente la disponivel" type="button">Servisu temporariamente la disponivel</button><button class="response-type ${state.demoStory.responseCategory === 'Presiza koordenasaun referénsia' ? 'active' : ''}" data-action="set-demo-response-category" data-category="Presiza koordenasaun referénsia" type="button">Presiza koordenasaun referénsia</button></div>` : ''}<textarea id="responseMessage" aria-label="Mensajen resposta" placeholder="Hakerek resposta klaru no loos ba komunidade...">${h(defaultMessage)}</textarea><div class="response-actions"><span class="helper">Komunidade sei haree resposta no oras rejistu nian.</span><div class="service-response-buttons"><button class="btn ghost" data-action="record-referral" data-id="${request.key}" type="button">Rejista referénsia</button><button class="btn primary" data-action="send-response" data-id="${request.key}" type="button">Fahe resposta <span class="arrow">→</span></button></div></div></div></details>`;
+}
+
 function renderInboxItem(request) {
   const selected = request.key === state.selectedRequest;
-  return `<button class="inbox-item ${selected ? 'selected' : ''}" data-action="select-request" data-id="${request.key}" type="button">
+  const meta = laneMeta[request.lane] || laneMeta.routine;
+  const emergency = request.lane === 'emergency';
+  const lastUpdate = request.lastUpdated || request.time || request.created || 'Agora daudaun';
+  const authority = requestAuthorityLabel(request);
+  return `<button class="inbox-item ${selected ? 'selected' : ''} ${emergency ? 'inbox-item-emergency' : ''}" data-action="select-request" data-id="${request.key}" type="button">
     <div class="inbox-item-top">
       ${laneIcon(request.lane)}
       <div class="inbox-item-content">
-        <div class="inbox-item-title"><strong>${h(request.title)}</strong><span class="inbox-time">${h(request.time)}</span></div>
-    <p class="inbox-item-summary">${h(request.status === 'Presiza informasaun liután' && request.moreInfoQuestion ? `Presiza informasaun: ${request.moreInfoQuestion}` : request.summary)}</p>
-    <div class="inbox-item-requester">${h(request.requester)}</div>
-    <div class="inbox-item-foot"><span class="location">${h(request.id)} · ${h(request.location)}</span>${statusPill(request.status, request.tone)}</div>
+        <div class="inbox-item-title"><div class="inbox-type-line"><span class="inbox-type-label">${h(meta.label)}</span>${emergency ? '<span class="inbox-emergency-badge">Emerjénsia</span>' : ''}</div><span class="inbox-time">${h(lastUpdate)}</span></div>
+        <strong class="inbox-request-title">${h(request.title)}</strong>
+        <p class="inbox-item-summary">${h(compactRequestSummary(request))}</p>
+        ${authority ? `<div class="inbox-item-requester">${h(authority)}</div>` : ''}
+        <div class="inbox-item-foot"><span class="location">⌖ ${h(request.location)}</span>${statusPill(request.status, request.tone)}</div>
       </div>
     </div>
   </button>`;
 }
 
-function renderEmergencyDetail(request) {
+function renderEmergencyWorkflow(request) {
   const stage = request.emergencyStage || 'received';
   const stageIndex = stage === 'responded' ? 2 : stage === 'coordinating' ? 1 : 0;
   const pathway = request.emergencyPathway || 'Seidauk rejista';
   const nextStep = request.emergencyNextStep || 'Seidauk rejista';
-  const stageLabels = ['Simu pedidu', 'Koordena', 'Fahe resposta'];
   const pathwayOptions = ['Seidauk rejista', 'Haruka ba dalan SNAEM ofisiál', 'Kontaktu servisu lokal responsavel', 'Presiza informasaun liután husi komunidade', 'La bele konfirma dalan ida-ne’e'];
   const nextStepOptions = ['Seidauk rejista', 'Servisu responsavel sei halo revizaun', 'Atualizasaun ba komunidade tuir mai', 'Hein informasaun liután', 'Referénsia rejistada'];
-  return `<div class="emergency-detail">
-    <div class="emergency-detail-header">
-      <div class="emergency-heading"><span class="emergency-heading-icon">!</span><div><div class="eyebrow">Emerjénsia · fila servisu</div><h2>Pedidu koordenasaun urjente</h2><p>${h(request.id)} · ${h(request.location)} · ${h(request.created)}</p></div></div>
-      ${statusPill(request.status, request.tone)}
-    </div>
-    <div class="emergency-alert"><strong>Pedidu emerjénsia presiza resposta tuir dalan ofisiál.</strong><span>Hamutuk Saúde rejista aksaun servisu no fahe resposta. Nia la halo avaliasaun klinika, la haruka ambulánsia, no la hili ospitál.</span></div>
+  return `<details class="service-response-details emergency-response-details" id="serviceResponseComposer"><summary>Aksaun emerjénsia</summary><div class="service-response-details-body"><div class="emergency-workflow-stage"><span class="step-badge">1</span><div><strong>Konfirma pedidu simu</strong><p>Rejistu de’it katak servisu simu pedidu ba revizaun.</p><button class="btn secondary" data-action="ack-emergency" data-id="${request.key}" type="button">${stageIndex > 0 ? 'Pedidu simu ona' : 'Konfirma pedidu simu'}</button></div></div><div class="emergency-workflow-stage"><span class="step-badge">2</span><div><strong>Rejista dalan koordenasaun</strong><div class="emergency-form-grid"><label class="form-field"><span>Dalan</span><select id="emergencyPathway">${pathwayOptions.map((option) => `<option ${option === pathway ? 'selected' : ''}>${option}</option>`).join('')}</select></label><label class="form-field"><span>Pasu tuir mai</span><select id="emergencyNextStep">${nextStepOptions.map((option) => `<option ${option === nextStep ? 'selected' : ''}>${option}</option>`).join('')}</select></label></div><button class="btn secondary" data-action="record-emergency-action" data-id="${request.key}" type="button">Rejista aksaun</button></div></div><div class="emergency-workflow-stage"><span class="step-badge">3</span><div><strong>Fahe resposta ba komunidade</strong><div class="template-row"><button class="response-type" data-action="fill-emergency-template" data-id="${request.key}" data-template="received" type="button">Pedidu simu</button><button class="response-type" data-action="fill-emergency-template" data-id="${request.key}" data-template="pathway" type="button">Dalan ofisiál</button><button class="response-type" data-action="fill-emergency-template" data-id="${request.key}" data-template="more-info" type="button">Presiza informasaun</button></div><textarea id="emergencyResponseMessage" placeholder="Hakerek resposta ne’ebé servisu bele konfirma...">${h(request.response || '')}</textarea><div class="emergency-response-footer"><span>Komunidade sei haree resposta no estadu ikus.</span><button class="btn primary" data-action="share-emergency-response" data-id="${request.key}" type="button">Fahe resposta <span class="arrow">→</span></button></div></div></div></div></details>`;
+}
 
-    <div class="emergency-stepper">${stageLabels.map((label, index) => `<div class="emergency-stage ${index < stageIndex ? 'done' : ''} ${index === stageIndex ? 'current' : ''}"><span>${index < stageIndex ? '✓' : index + 1}</span><strong>${label}</strong></div>${index < stageLabels.length - 1 ? '<i>→</i>' : ''}`).join('')}</div>
-
-    <div class="emergency-content-grid">
-      <div class="emergency-main-column">
-        <section class="emergency-card">
-          <div class="emergency-card-heading"><div><h3>Saida mak komunidade husu?</h3><span>Liafuan ne’ebé servisu simu</span></div>${statusPill('Emerjénsia', 'coral')}</div>
-          <p class="emergency-quote">“${h(request.quote)}”</p>
-          <div class="emergency-meta"><span>Husi: <strong>${h(request.requester)}</strong></span><span>Fatin: <strong>${h(request.location)}</strong></span>${request.contact ? `<span>Kontaktu: <strong>${h(request.contact)}</strong></span>` : ''}</div>
-          <div class="service-audit"><span>Rejistu responsabilidade</span><strong>Responsavel servisu: João S. (ezemplu)</strong><span>Ohin, 09:12</span></div>
-        </section>
-
-        <section class="emergency-card emergency-action-card">
-          <div class="emergency-card-heading"><div><h3>Passu 1 · Konfirma pedidu simu</h3><span>Hatudu katak servisu iha pedidu no komesa revizaun.</span></div><span class="step-badge">1</span></div>
-          <p class="emergency-helper">Konfirmasaun ida-ne’e la’ós desizaun mediku. Nia de’it kria rejistu klaru katak servisu simu pedidu ba revizaun.</p>
-          <button class="btn ${stageIndex > 0 ? 'secondary' : 'primary'}" data-action="ack-emergency" data-id="${request.key}" type="button">${stageIndex > 0 ? 'Pedidu simu ona' : 'Konfirma pedidu simu'} <span class="arrow">→</span></button>
-        </section>
-
-        <section class="emergency-card emergency-action-card">
-          <div class="emergency-card-heading"><div><h3>Passu 2 · Rejista dalan koordenasaun</h3><span>Hili de’it aksaun ne’ebé servisu halo ka konfirma ona.</span></div><span class="step-badge">2</span></div>
-          <div class="emergency-form-grid"><label class="form-field"><span>Dalan ne’ebé rejista</span><select id="emergencyPathway">${pathwayOptions.map((option) => `<option ${option === pathway ? 'selected' : ''}>${option}</option>`).join('')}</select></label><label class="form-field"><span>Pasu tuir mai</span><select id="emergencyNextStep">${nextStepOptions.map((option) => `<option ${option === nextStep ? 'selected' : ''}>${option}</option>`).join('')}</select></label></div>
-          <button class="btn secondary" data-action="record-emergency-action" data-id="${request.key}" type="button">Rejista aksaun koordenasaun <span class="arrow">→</span></button>
-        </section>
-
-        <section class="emergency-card emergency-response-card">
-          <div class="emergency-card-heading"><div><h3>Passu 3 · Fahe resposta ba komunidade</h3><span>Uza liafuan klaru kona-ba buat ne’ebé servisu konfirma.</span></div><span class="step-badge">3</span></div>
-          <div class="template-row"><span class="structured-label">Kategoria resposta emerjénsia:</span><button class="response-type" data-action="fill-emergency-template" data-id="${request.key}" data-template="received" type="button">Pedidu simu</button><button class="response-type" data-action="fill-emergency-template" data-id="${request.key}" data-template="pathway" type="button">Dalan ofisiál</button><button class="response-type" data-action="fill-emergency-template" data-id="${request.key}" data-template="more-info" type="button">Presiza informasaun</button></div>
-          <textarea id="emergencyResponseMessage" placeholder="Hakerek resposta ne’ebé servisu bele konfirma...">${h(request.response || '')}</textarea>
-          <div class="emergency-response-footer"><span>Komunidade sei haree resposta no estadu ikus iha istória.</span><button class="btn primary" data-action="share-emergency-response" data-id="${request.key}" type="button">Fahe resposta <span class="arrow">→</span></button></div>
-        </section>
-      </div>
-
-      <aside class="emergency-side-column">
-        <section class="emergency-card community-preview-card"><div class="emergency-card-heading"><div><h3>Komunidade sei haree</h3><span>Haree antes fahe</span></div><span class="preview-eye">◉</span></div><div class="preview-status"><span>Estadu</span>${statusPill(request.status, request.tone)}</div><p>${request.response ? h(request.response) : 'Seidauk iha resposta. Hamutuk Saúde sei la hatudu resposta to’o servisu rejista no fahe ida.'}</p><div class="preview-note">Ita-nia resposta tenke hatete saida mak konfirma ona, pasu tuir mai, no saida mak seidauk konfirma.</div></section>
-        <section class="emergency-card emergency-boundary-card"><h3>Limite seguransa</h3><ul><li>La halo diagnóstiku</li><li>La fó resepita</li><li>La haruka ambulánsia</li><li>La hili ospitál</li><li>La promete resposta bainhira seidauk konfirma</li></ul></section>
-        <section class="emergency-card emergency-timeline-card"><div class="emergency-card-heading"><div><h3>Istória atividade</h3><span>${request.timeline.length} eventu</span></div></div>${timelineMarkup(request.timeline)}</section>
-      </aside>
+function renderEmergencyDetail(request) {
+  const meta = laneMeta[request.lane] || laneMeta.emergency;
+  const authority = requestAuthorityLabel(request);
+  const lastUpdate = request.lastUpdated || request.time || request.created || 'Agora daudaun';
+  return `<div class="service-detail-correction emergency-clean-detail">
+    <header class="service-detail-header emergency-clean-header">
+      <div class="service-detail-heading-row"><div class="detail-kicker">${laneIcon(request.lane)}<div><span class="service-detail-type">${h(meta.label)}</span><h2>${h(request.title)}</h2></div></div><div class="service-detail-status-large">${statusPill(request.status, request.tone)}</div></div>
+      <div class="service-detail-meta"><strong>${h(request.id)}</strong><span>⌖ ${h(request.location)}</span><span>Rejistu ${h(request.created || request.time || 'Agora daudaun')}</span><span>Atualizasaun ${h(lastUpdate)}</span></div>
+      ${authority ? `<div class="service-detail-authority">${h(authority)}</div>` : ''}
+    </header>
+    <div class="service-detail-body">
+      ${serviceOriginalRequestMarkup(request, meta)}
+      <section class="service-current-status coral"><div class="service-status-symbol">!</div><div><span class="eyebrow">Estadu agora</span><h3>${h(request.status)}</h3><p>${h(serviceStatusExplanation(request))}</p></div></section>
+      <section class="service-timeline-section"><div class="service-section-heading"><div><span class="eyebrow">Istória</span><h3>Istória atividade</h3></div><span>${request.timeline.length} eventu</span></div>${timelineMarkup(request.timeline)}</section>
+      <section class="service-actions-section"><div class="service-section-heading"><div><span class="eyebrow">Pasu tuir mai</span><h3>Aksaun servisu</h3></div></div><div class="service-primary-actions">${serviceNextActionMarkup(request)}</div>${renderEmergencyWorkflow(request)}</section>
+      <div class="service-safety-compact emergency-safety"><strong>Limite emerjénsia:</strong><span>Uza dalan ofisiál · La halo diagnóstiku · La haruka ambulánsia · La hili ospitál</span></div>
     </div>
   </div>`;
 }
 
 function renderServiceDetail(request) {
   if (request && request.lane === 'emergency') return renderEmergencyDetail(request);
-  if (!request) return '<div class="empty-state">Hili pedidu ida atu haree nia detalhe.</div>';
-  const meta = laneMeta[request.lane];
+  if (!request) return '<div class="service-empty-state"><span class="service-empty-icon">⌁</span><strong>Hili pedidu ida atu haree nia detalhe.</strong><p>Informasaun pedidu sei mosu iha ne’e.</p></div>';
+  const meta = laneMeta[request.lane] || laneMeta.routine;
+  const authority = requestAuthorityLabel(request);
   const isDemoRequest = state.demoStory.active && request.key === state.demoStory.requestKey;
   const savedDraft = state.responseDraftKey === request.key ? state.responseDraft : '';
   const defaultMessage = request.response || (isDemoRequest && state.demoStory.step >= 4 ? state.demoStory.responseText : savedDraft);
-  return `<div class="detail-header">
-    <div class="detail-header-top">
-      <div class="detail-kicker">${laneIcon(request.lane)}<div><h2>${h(request.title)}</h2><div class="request-id">${h(request.id)} · ${h(meta.label)}</div></div></div>
-      ${statusPill(request.status, request.tone)}
-    </div>
-    <div class="location-line"><span>⌖</span>${h(request.location)}<span>·</span><span>${h(request.created)}</span></div>
-    <div class="service-audit-line">Rejistu haree husi <strong>Responsavel servisu: João S. (ezemplu)</strong> · Ohin, 09:12</div>
-  </div>
-  <div class="detail-body">
-    <div class="info-grid">
-      <div class="info-block"><label>Pedidu husi</label><strong>${h(request.requester)}</strong><p>Papel rejista ba responsabilidade, la’ós ba desizaun klinika.</p></div>
-      <div class="info-block"><label>Dalan</label><strong>${h(meta.label)}</strong><p>${h(meta.copy)}</p></div>
-      ${request.contact ? `<div class="info-block"><label>Numeru telefone kontaktu</label><strong>${h(request.contact)}</strong><p>Uza de’it ba koordenasaun ne’ebé rejista ona.</p></div>` : ''}
-      ${request.lane === 'medicine' && request.resourceStatus ? `<div class="info-block resource-status-block"><label>Estadu rekursu</label><strong>${h(request.resourceStatus)}</strong><p>Atualiza ikus: ${h(request.resourceUpdated || 'La hatene')}</p></div>` : ''}
-      ${request.pregnancyInfo ? `<div class="info-block"><label>Informasaun maternidade</label><strong>${h(request.pregnancyInfo)}</strong><p>Informasaun opcional husi komunidade.</p></div>` : ''}
-      ${request.preferredTime ? `<div class="info-block"><label>Tempu preferidu</label><strong>${h(request.preferredTime)}</strong><p>Preferénsia komunidade, la’ós konfirmasaun oráriu.</p></div>` : ''}
-      ${request.affectedCount ? `<div class="info-block"><label>Ema afetadu</label><strong>${h(request.affectedCount)}</strong><p>Dadus husi rejistu komunidade.</p></div>` : ''}
-    </div>
+  const lastUpdate = request.lastUpdated || request.time || request.created || 'Agora daudaun';
+  const replyContext = request.moreInfoQuestion && request.communityReply && request.replyStatus !== 'Rai iha dispozitivu — seidauk haruka'
+    ? `<div class="service-status-context"><strong>Resposta husi komunidade</strong><p>“${h(request.communityReply)}”</p><small>${h(request.replySyncedAt || 'Agora daudaun')}</small></div>`
+    : '';
+  const questionContext = request.moreInfoQuestion
+    ? `<div class="service-status-context question"><strong>Pregunta husu husi servisu saúde</strong><p>“${h(request.moreInfoQuestion)}”</p><small>${h(request.moreInfoAskedAt || lastUpdate)}</small></div>`
+    : '';
+  const responseContext = request.response
+    ? `<div class="service-status-context response"><strong>Resposta ikus</strong><p>“${h(request.response)}”</p>${request.responseBy ? `<small>Fahe husi ${h(request.responseBy)} · ${h(request.responseAt || lastUpdate)}</small>` : ''}</div>`
+    : '';
+  return `<div class="service-detail-correction">
+    <header class="service-detail-header">
+      <div class="service-detail-heading-row"><div class="detail-kicker">${laneIcon(request.lane)}<div><span class="service-detail-type">${h(meta.label)}</span><h2>${h(request.title)}</h2></div></div><div class="service-detail-status-large">${statusPill(request.status, request.tone)}</div></div>
+      <div class="service-detail-meta"><strong>${h(request.id)}</strong><span>⌖ ${h(request.location)}</span><span>Rejistu ${h(request.created || request.time || 'Agora daudaun')}</span><span>Atualizasaun ${h(lastUpdate)}</span></div>
+      ${authority ? `<div class="service-detail-authority">${h(authority)}</div>` : ''}
+    </header>
+    <div class="service-detail-body">
+      ${serviceOriginalRequestMarkup(request, meta)}
 
-    <div class="detail-section">
-      <div class="detail-section-heading"><h3>Pedidu simu ona</h3><span>Liafuan komunidade</span></div>
-      <p class="request-quote">“${h(request.quote)}”</p>
-      ${request.receivedFromOffline ? '<div class="offline-origin-note"><strong>Origem pedidu:</strong> Rai iha dispozitivu bainhira la iha koneksaun; haruka de’it bainhira koneksaun fila fali.</div>' : ''}
-      ${request.communityReply && request.replyStatus !== 'Rai iha dispozitivu — seidauk haruka' ? `<div class="community-reply-service-card"><div class="detail-section-heading"><h3>Resposta husi komunidade</h3>${statusPill(request.replyStatus || 'Resposta haruka ona — hein revizaun', 'info')}</div><p class="request-quote">“${h(request.communityReply)}”</p><small>Resposta ligadu ho pedidu ida-ne’e · ${h(request.replySyncedAt || 'Seidauk sincronizadu')}</small></div>` : ''}
-      <div class="safeguard-note"><strong>Limite koordenasaun:</strong> hatán kona-ba buat ne’ebé servisu bele konfirma, pasu koordenasaun tuir mai, no referénsia ne’ebé rejista. Labele uza fila pedidu ida-ne’e atu halo diagnóstiku, fó resepita, haruka ambulánsia, ka hili ospitál.</div>
-      <div class="response-checklist">
-        <div class="detail-section-heading"><h3>Molok fahe resposta</h3><span>3 buat klaru</span></div>
-        <div class="checklist-list">
-          <div class="checklist-row"><span class="checklist-number">1</span><div><strong>Saida mak servisu bele konfirma?</strong><span>Uza informasaun ne’ebé loos no atual.</span></div></div>
-          <div class="checklist-row"><span class="checklist-number">2</span><div><strong>Saida mak pasu tuir mai?</strong><span>Hatete ba komunidade saida mak sei akontese depois.</span></div></div>
-          <div class="checklist-row"><span class="checklist-number">3</span><div><strong>Iha referénsia ka rekursu rejistadu?</strong><span>Hatama de’it buat ne’ebé servisu konfirma ona.</span></div></div>
-        </div>
-      </div>
-    </div>
+      <section class="service-current-status ${request.tone || 'neutral'}"><div class="service-status-symbol">${request.status === 'Resposta disponivel' ? '✓' : request.status === 'Presiza informasaun liután' ? '?' : request.status === 'Rai iha dispozitivu — seidauk haruka' ? '◌' : '·'}</div><div><span class="eyebrow">Estadu agora</span><h3>${h(request.status)}</h3><p>${h(serviceStatusExplanation(request))}</p>${questionContext}${replyContext}${responseContext}</div></section>
 
-    <div class="response-composer">
-      <h3>Rejista resposta</h3>
-      <div class="response-types">
-        ${['Resposta servisu', 'Presiza informasaun liután', 'Referénsia rejistada', 'Atualizasaun rekursu'].map((kind) => `<button class="response-type ${state.responseKind === kind ? 'active' : ''}" data-action="set-response-kind" data-kind="${h(kind)}" type="button">${h(kind)}</button>`).join('')}
-      </div>
-      ${request.lane === 'maternity' ? `<div class="structured-response-row demo-response-category-row"><span>Kategoria resposta maternidade:</span><button class="response-type ${state.demoStory.responseCategory === 'Bele simu / avalia' ? 'active' : ''}" data-action="set-demo-response-category" data-category="Bele simu / avalia" type="button">Bele simu / avalia</button><button class="response-type ${state.demoStory.responseCategory === 'Presiza informasaun liután' ? 'active' : ''}" data-action="set-demo-response-category" data-category="Presiza informasaun liután" type="button">Presiza informasaun liután</button><button class="response-type ${state.demoStory.responseCategory === 'Servisu temporariamente la disponivel' ? 'active' : ''}" data-action="set-demo-response-category" data-category="Servisu temporariamente la disponivel" type="button">Servisu temporariamente la disponivel</button><button class="response-type ${state.demoStory.responseCategory === 'Presiza koordenasaun referénsia' ? 'active' : ''}" data-action="set-demo-response-category" data-category="Presiza koordenasaun referénsia" type="button">Presiza koordenasaun referénsia</button></div>` : ''}
-      <textarea id="responseMessage" aria-label="Mensajen resposta" placeholder="Hakerek resposta klaru no loos ba komunidade...">${h(defaultMessage)}</textarea>
-      <div class="response-actions"><span class="helper">Komunidade sei haree resposta no oras rejistu nian.</span><div style="display:flex;gap:7px;align-items:center;"><button class="btn ghost" data-action="record-referral" data-id="${request.key}" type="button">Rejista referénsia</button><button class="btn primary" data-action="send-response" data-id="${request.key}" type="button">Fahe resposta <span class="arrow">→</span></button></div></div>
-    </div>
+      <section class="service-timeline-section"><div class="service-section-heading"><div><span class="eyebrow">Istória</span><h3>Istória atividade</h3></div><span>${request.timeline.length} eventu</span></div>${timelineMarkup(request.timeline)}</section>
 
-    <div class="detail-section">
-      <div class="detail-section-heading"><h3>Istória atividade ne’ebé la bele muda</h3><span>${request.timeline.length} eventu</span></div>
-      ${timelineMarkup(request.timeline)}
+      <section class="service-actions-section"><div class="service-section-heading"><div><span class="eyebrow">Pasu tuir mai</span><h3>Aksaun servisu</h3></div></div><div class="service-primary-actions">${serviceNextActionMarkup(request)}</div>${serviceResponseComposerMarkup(request, defaultMessage)}</section>
+
+      <div class="service-safety-compact"><strong>Limite servisu:</strong><span>La halo diagnóstiku · La fó resepita · La haruka ambulánsia · La hili ospitál</span></div>
     </div>
   </div>`;
 }
 
 function renderService() {
   const list = filteredRequests();
-  const metrics = serviceMetricData();
-  const selected = getRequest(state.selectedRequest);
+  const selected = state.selectedRequest ? state.requests.find((request) => request.key === state.selectedRequest) : null;
   const filters = ['Pedidu hotu', 'Simu ona — hein revizaun', 'Presiza informasaun liután', 'Resposta disponivel', 'Fila bainhira la iha koneksaun'];
-  return `<div class="service-shell">
-    <aside class="service-sidebar">
-      <div class="eyebrow" style="margin-left:10px;">Espasu servisu saúde</div>
-      <div class="facility-card" style="margin-top:12px;"><span class="facility-symbol">+</span><div><strong>Servisu saúde ezemplu</strong><span>Timor-Leste · mesa koordenasaun</span></div></div>
-      <div class="sidebar-label">Fila pedidu</div>
-      <nav class="side-nav">
-        ${filters.map((filter, index) => `<button class="${state.activeFilter === filter ? 'active' : ''}" data-action="set-filter" data-filter="${h(filter)}" type="button"><span class="nav-left"><span class="nav-glyph">${['▣', '!', '?', '✓', '◌'][index]}</span>${h(filter)}</span><span class="side-count">${index === 0 ? state.requests.length : index === 1 ? state.requests.filter((r) => ['Simu ona — hein revizaun', 'Presiza resposta', 'Revisaun iha prosesu', 'Haruka ba servisu saúde'].includes(r.status)).length : index === 2 ? state.requests.filter((r) => r.status === 'Presiza informasaun liután').length : index === 3 ? state.requests.filter((r) => ['Resposta fahe ona', 'Resposta disponivel', 'Referénsia rejistada'].includes(r.status)).length : state.requests.filter((r) => ['Rai iha dispozitivu — seidauk haruka', 'Hein sincronizasaun'].includes(r.status)).length}</span></button>`).join('')}
-      </nav>
-      <div class="sidebar-label">Limites no seguransa</div>
-      <nav class="side-nav">
-        <button data-action="open-help" type="button"><span class="nav-left"><span class="nav-glyph">◈</span>Orientasaun ba resposta</span><span class="nav-glyph">›</span></button>
-        <button data-action="open-offline-guide" type="button"><span class="nav-left"><span class="nav-glyph">⌁</span>Estadu sincronizasaun</span><span class="nav-glyph">›</span></button>
-      </nav>
-      <div class="sidebar-bottom"><strong>Rai rejistu ho onestidade</strong><p>Mudansa estadu sira visível iha istória. Resposta ida la’ós desizaun mediku.</p><button data-action="open-help" type="button">Haree prinsipiu sira →</button></div>
-    </aside>
-
-    <main class="service-main">
-      <div class="service-header">
-        <div><div class="eyebrow">Fila pedidu servisu saúde · dadus ezemplu</div><h1 class="page-title">Haree pedidu no fahe resposta.</h1><p class="page-subtitle">Reviza pedidu sira, rejista buat ne’ebé servisu bele konfirma, no fahe pasu klaru fila ba komunidade.</p></div>
-        <div class="service-header-actions"><span class="pill ${state.online ? 'success' : 'warning'}"><span class="connection-dot"></span>${state.online ? 'Iha koneksaun' : 'La iha koneksaun'}</span><button class="btn secondary" data-action="demo-story" type="button">Haree istória kompletu (Demo)</button><button class="btn secondary" data-action="open-community" type="button">Haree aplikasaun komunidade</button></div>
-      </div>
-
-      <div class="demo-entry-card service-demo-entry">
-        <div><span class="demo-entry-kicker">Istória interativu · Maria iha Remexio</span><strong>Haree istória kompletu (Demo)</strong><p>La iha koneksaun → Haruka → Resposta iha minutu balu</p></div>
-        <button class="btn primary" data-action="demo-story" type="button">Hahú demo <span class="arrow">→</span></button>
-      </div>
-
-      <div class="service-explainer">
-        <div class="service-explainer-copy"><strong>Oinsá atu uza fila pedidu</strong><span>Haree informasaun, konfirma buat ne’ebé servisu bele halo, no fahe resposta.</span><small class="pilot-inline">Sistema ida-ne’e desenyu atu servisu iha suku ho koneksaun satélite partilhada no eletrisidade la stabile.</small></div>
-        <div class="explainer-steps"><div class="explainer-step"><b>1</b>Haree pedidu</div><span class="explainer-arrow">→</span><div class="explainer-step"><b>2</b>Konfirma</div><span class="explainer-arrow">→</span><div class="explainer-step"><b>3</b>Fahe resposta</div></div>
-      </div>
-
-      <div class="metric-grid">${metrics.map((metric) => `<div class="metric-card"><div class="metric-top"><span class="metric-label">${h(metric.label)}</span><span class="metric-icon ${metric.tone}">${metric.icon}</span></div><strong class="metric-value">${metric.value}</strong><span class="metric-foot ${metric.tone === 'teal' ? 'good' : ''}">${h(metric.foot)}</span></div>`).join('')}</div>
-
-      <div class="service-workspace">
-        <section class="inbox-panel">
-          <div class="panel-head"><div class="panel-head-row"><div><h2>Fila pedidu</h2><p>${list.length} pedidu iha haree ida-ne’e</p></div><span class="pill neutral">Dadus ezemplu</span></div><label class="search-box"><span>⌕</span><input id="inboxSearch" value="${h(state.search)}" placeholder="Buka liuhusi referénsia, fatin, ka dalan" aria-label="Buka iha fila pedidu" /></label><div class="filter-row">${filters.map((filter) => `<button class="filter-button ${state.activeFilter === filter ? 'active' : ''}" data-action="set-filter" data-filter="${h(filter)}" type="button">${h(filter)}</button>`).join('')}</div></div>
-          <div class="inbox-list">${list.length ? list.map(renderInboxItem).join('') : '<div class="empty-state">La iha pedidu ne’ebé tuir haree ida-ne’e.</div>'}</div>
+  const filterButtons = filters.map((filter) => `<button class="service-correction-filter ${state.activeFilter === filter ? 'active' : ''}" data-action="set-filter" data-filter="${h(filter)}" type="button">${h(filter)}</button>`).join('');
+  return `<div class="service-shell service-correction-shell">
+    <main class="service-main service-correction-main">
+      <div class="service-two-column">
+        <section class="inbox-panel service-inbox-panel service-inbox-column" aria-label="Fila Pedidu">
+          <header class="service-inbox-header">
+            <div><div class="eyebrow">Servisu Saúde</div><h1 class="page-title">Fila Pedidu</h1><p class="page-subtitle">Prioriza pedidu sira no reviza informasaun husi komunidade.</p></div>
+            <div class="service-inbox-connection"><span class="pill ${state.online ? 'success' : 'warning'}"><span class="connection-dot"></span>${state.online ? 'Iha koneksaun' : 'La iha koneksaun'}</span></div>
+          </header>
+          <nav class="service-correction-filters" aria-label="Filtru pedidu">${filterButtons}</nav>
+          <div class="correction-inbox-label">Pedidu sira</div>
+          <div class="inbox-list">${list.length ? list.map(renderInboxItem).join('') : serviceEmptyState()}</div>
         </section>
-        <section class="detail-panel" aria-label="Detalhe pedidu hili ona">${renderServiceDetail(selected)}</section>
+        <section class="detail-panel service-detail-panel" aria-label="Detalhe pedidu hili ona">${renderServiceDetail(selected)}</section>
       </div>
     </main>
   </div>`;
@@ -960,6 +978,7 @@ function recordReferral(form) {
   const destination = data.get('destination');
   const status = data.get('status');
   const note = data.get('note');
+  touchRequest(request);
   request.status = status;
   request.tone = status === 'Referénsia rejistada' ? 'success' : 'info';
   request.response = `${note} Destinu rejistadu: ${destination}.`;
@@ -1229,8 +1248,11 @@ function handleAction(actionElement) {
   if (action === 'demo-open-response') return demoStoryOpenResponse();
   if (action === 'demo-return-community') return demoStoryReturnCommunity();
   if (action === 'demo-focus-response') {
-    const composer = document.querySelector('.response-composer');
-    if (composer) composer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const composer = document.getElementById('serviceResponseComposer') || document.querySelector('.response-composer');
+    if (composer) {
+      composer.open = true;
+      composer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
     return;
   }
   if (action === 'demo-send-response') {
@@ -1301,9 +1323,27 @@ function handleAction(actionElement) {
     renderApp();
     return;
   }
+  if (action === 'focus-service-response') {
+    state.responseKind = actionElement.dataset.kind || 'Resposta servisu';
+    renderApp();
+    window.setTimeout(() => {
+      const composer = document.getElementById('serviceResponseComposer');
+      const textarea = document.getElementById('responseMessage') || document.getElementById('emergencyResponseMessage');
+      if (composer) {
+        composer.open = true;
+        composer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      if (textarea) textarea.focus();
+    }, 50);
+    return;
+  }
   if (action === 'set-response-kind') {
     state.responseKind = actionElement.dataset.kind;
     renderApp();
+    window.setTimeout(() => {
+      const composer = document.getElementById('serviceResponseComposer');
+      if (composer) composer.open = true;
+    }, 20);
     return;
   }
   if (action === 'set-demo-response-category') {
@@ -1317,8 +1357,11 @@ function handleAction(actionElement) {
       if (textarea) textarea.value = state.demoStory.responseText;
       renderApp();
       window.setTimeout(() => {
-        const composer = document.querySelector('.response-composer');
-        if (composer && state.demoStory.step === 4) composer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const composer = document.getElementById('serviceResponseComposer') || document.querySelector('.response-composer');
+        if (composer) {
+          composer.open = true;
+          if (state.demoStory.step === 4) composer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
       }, 50);
     }
     return;
@@ -1344,6 +1387,7 @@ function handleAction(actionElement) {
       showToast('Hatama resposta uluk', 'Hakerek buat ne’ebé servisu bele konfirma molok fahe.', 'warning');
       return;
     }
+    touchRequest(request);
     request.response = message;
     if (state.demoStory.active && request.key === state.demoStory.requestKey) {
       request.status = 'Resposta disponivel';
@@ -1388,6 +1432,7 @@ function handleAction(actionElement) {
       return;
     }
     request.emergencyStage = 'coordinating';
+    touchRequest(request);
     request.status = 'Simu ona — hein revizaun';
     request.tone = 'warning';
     request.timeline.unshift({ title: 'Simu ona — hein revizaun', detail: 'Servisu saúde komesa revizaun · agora daudaun' });
@@ -1406,6 +1451,7 @@ function handleAction(actionElement) {
       return;
     }
     request.emergencyStage = 'coordinating';
+    touchRequest(request);
     request.emergencyPathway = pathway;
     request.emergencyNextStep = nextStep;
     request.status = 'Haruka ba servisu saúde';
@@ -1439,6 +1485,7 @@ function handleAction(actionElement) {
       return;
     }
     if (request.emergencyResponseKind === 'more-info') {
+      touchRequest(request);
       request.response = '';
       request.status = 'Presiza informasaun liután';
       request.tone = 'warning';
@@ -1453,6 +1500,7 @@ function handleAction(actionElement) {
       showToast('Presiza informasaun liután', 'Komunidade agora bele haree pergunta no fó resposta.');
       return;
     }
+    touchRequest(request);
     request.response = message;
     request.status = 'Resposta disponivel';
     request.tone = 'success';
