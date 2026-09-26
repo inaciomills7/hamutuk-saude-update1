@@ -2184,3 +2184,33 @@ body {
   .service-correction-main .service-inbox-header { display: block; padding: 15px 13px 13px; }
   .service-inbox-connection { margin-top: 10px; }
 }
+
+/* Clean response form: one focused action, no open multi-step workflow */
+.service-response-details-body { padding: 0 13px 14px; }
+.service-response-details-body h3 { margin: 0 0 12px; color: var(--ink); font-size: 13px; letter-spacing: -.02em; }
+.service-form-label { display: block; margin: 11px 0 5px; color: var(--ink-soft); font-size: 9px; font-weight: 800; }
+.service-response-select { display: block; width: 100%; min-height: 38px; box-sizing: border-box; padding: 8px 10px; border: 1px solid #d4e2da; border-radius: 9px; background: #fbfdfc; color: var(--ink); font: inherit; font-size: 10px; outline: none; }
+.service-response-select:focus { border-color: #8dbfa8; box-shadow: 0 0 0 3px rgba(51,132,103,.12); }
+.service-response-details-body textarea,
+.service-response-details-body #responseMessage,
+.service-response-details-body #emergencyResponseMessage { display: block; width: 100%; min-height: 136px; box-sizing: border-box; margin: 0; padding: 12px; border: 1px solid #d4e2da; border-radius: 10px; background: #fbfdfc; color: var(--ink); font: inherit; font-size: 10px; line-height: 1.5; outline: none; resize: vertical; }
+.service-response-details-body textarea::placeholder { color: #9aaea5; }
+.service-response-details-body textarea:focus { border-color: #8dbfa8; box-shadow: 0 0 0 3px rgba(51,132,103,.12); background: #fff; }
+.service-response-submit { display: flex; justify-content: flex-end; margin-top: 11px; }
+.service-response-submit .btn { min-height: 38px; padding: 9px 14px; font-size: 10px; }
+.emergency-response-details { border-color: rgba(211,178,169,.72); }
+.emergency-response-details > summary { color: #884b42; }
+.emergency-coordination-details { margin-top: 13px; border-top: 1px solid rgba(218,228,222,.82); }
+.emergency-coordination-details > summary { padding: 9px 0 2px; color: var(--muted); cursor: pointer; font-size: 8px; font-weight: 800; list-style: none; }
+.emergency-coordination-details > summary::-webkit-details-marker { display: none; }
+.emergency-coordination-body { display: grid; gap: 8px; padding-top: 9px; }
+.emergency-coordination-body .btn { justify-self: start; min-height: 31px; padding: 7px 9px; font-size: 8px; }
+.emergency-coordination-body .emergency-form-grid { margin: 0; }
+@media (max-width: 560px) {
+  .service-response-submit { justify-content: stretch; }
+  .service-response-submit .btn { width: 100%; }
+}
+/* The visible Aksaun servisu button opens the form; keep the form itself quiet until then. */
+.service-response-details > summary { display: none; }
+.service-response-details[open] { padding-top: 12px; }
+.service-response-details[open] .service-response-details-body { padding-top: 0; }
