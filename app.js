@@ -423,11 +423,12 @@ function compactRequestSummary(request) {
   const text = request.status === 'Presiza informasaun liután' && request.moreInfoQuestion
     ? `Servisu saúde husu: ${request.moreInfoQuestion}`
     : String(request.summary || request.quote || 'Pedidu rejistadu.');
-  return text.length > 125 ? `${text.slice(0, 122).trim()}…` : text;
+  return text.length > 95 ? `${text.slice(0, 92).trim()}…` : text;
 }
 
 function serviceResponseComposerMarkup(request, defaultMessage) {
-  return `<details class="service-response-details" id="serviceResponseComposer"><summary>Rejista resposta</summary><div class="service-response-details-body"><div class="response-types">${['Resposta servisu', 'Presiza informasaun liután', 'Referénsia rejistada', 'Atualizasaun rekursu'].map((kind) => `<button class="response-type ${state.responseKind === kind ? 'active' : ''}" data-action="set-response-kind" data-kind="${h(kind)}" type="button">${h(kind)}</button>`).join('')}</div>${request.lane === 'maternity' ? `<div class="structured-response-row demo-response-category-row"><span>Kategoria resposta maternidade:</span><button class="response-type ${state.demoStory.responseCategory === 'Bele simu / avalia' ? 'active' : ''}" data-action="set-demo-response-category" data-category="Bele simu / avalia" type="button">Bele simu / avalia</button><button class="response-type ${state.demoStory.responseCategory === 'Presiza informasaun liután' ? 'active' : ''}" data-action="set-demo-response-category" data-category="Presiza informasaun liután" type="button">Presiza informasaun liután</button><button class="response-type ${state.demoStory.responseCategory === 'Servisu temporariamente la disponivel' ? 'active' : ''}" data-action="set-demo-response-category" data-category="Servisu temporariamente la disponivel" type="button">Servisu temporariamente la disponivel</button><button class="response-type ${state.demoStory.responseCategory === 'Presiza koordenasaun referénsia' ? 'active' : ''}" data-action="set-demo-response-category" data-category="Presiza koordenasaun referénsia" type="button">Presiza koordenasaun referénsia</button></div>` : ''}<textarea id="responseMessage" aria-label="Mensajen resposta" placeholder="Hakerek resposta klaru no loos ba komunidade...">${h(defaultMessage)}</textarea><div class="response-actions"><span class="helper">Komunidade sei haree resposta no oras rejistu nian.</span><div class="service-response-buttons"><button class="btn ghost" data-action="record-referral" data-id="${request.key}" type="button">Rejista referénsia</button><button class="btn primary" data-action="send-response" data-id="${request.key}" type="button">Fahe resposta <span class="arrow">→</span></button></div></div></div></details>`;
+  const responseKinds = ['Resposta servisu', 'Presiza informasaun liután', 'Referénsia rejistada', 'Atualizasaun rekursu'];
+  return `<details class="service-response-details" id="serviceResponseComposer"><summary>Fahe resposta</summary><div class="service-response-details-body"><h3>Fahe resposta ba komunidade</h3><label class="service-form-label" for="serviceResponseKind">Kategoria resposta</label><select id="serviceResponseKind" class="service-response-select">${responseKinds.map((kind) => `<option value="${h(kind)}" ${state.responseKind === kind ? 'selected' : ''}>${h(kind)}</option>`).join('')}</select><label class="service-form-label" for="responseMessage">Mensajen ba komunidade</label><textarea id="responseMessage" rows="5" aria-label="Mensajen resposta" placeholder="Hakerek resposta klaru no loos ba komunidade...">${h(defaultMessage)}</textarea><div class="service-response-submit"><button class="btn primary" data-action="send-response" data-id="${request.key}" type="button">Fahe resposta <span class="arrow">→</span></button></div></div></details>`;
 }
 
 function renderInboxItem(request) {
@@ -440,7 +441,7 @@ function renderInboxItem(request) {
     <div class="inbox-item-top">
       ${laneIcon(request.lane)}
       <div class="inbox-item-content">
-        <div class="inbox-item-title"><div class="inbox-type-line"><span class="inbox-type-label">${h(meta.label)}</span>${emergency ? '<span class="inbox-emergency-badge">Emerjénsia</span>' : ''}</div><span class="inbox-time">${h(lastUpdate)}</span></div>
+        <div class="inbox-item-title"><div class="inbox-type-line"><span class="inbox-type-label">${h(meta.label)}</span>${emergency ? '<span class="inbox-emergency-badge">Urjente</span>' : ''}</div><span class="inbox-time">${h(lastUpdate)}</span></div>
         <strong class="inbox-request-title">${h(request.title)}</strong>
         <p class="inbox-item-summary">${h(compactRequestSummary(request))}</p>
         ${authority ? `<div class="inbox-item-requester">${h(authority)}</div>` : ''}
@@ -451,13 +452,11 @@ function renderInboxItem(request) {
 }
 
 function renderEmergencyWorkflow(request) {
-  const stage = request.emergencyStage || 'received';
-  const stageIndex = stage === 'responded' ? 2 : stage === 'coordinating' ? 1 : 0;
   const pathway = request.emergencyPathway || 'Seidauk rejista';
   const nextStep = request.emergencyNextStep || 'Seidauk rejista';
   const pathwayOptions = ['Seidauk rejista', 'Haruka ba dalan SNAEM ofisiál', 'Kontaktu servisu lokal responsavel', 'Presiza informasaun liután husi komunidade', 'La bele konfirma dalan ida-ne’e'];
   const nextStepOptions = ['Seidauk rejista', 'Servisu responsavel sei halo revizaun', 'Atualizasaun ba komunidade tuir mai', 'Hein informasaun liután', 'Referénsia rejistada'];
-  return `<details class="service-response-details emergency-response-details" id="serviceResponseComposer"><summary>Aksaun emerjénsia</summary><div class="service-response-details-body"><div class="emergency-workflow-stage"><span class="step-badge">1</span><div><strong>Konfirma pedidu simu</strong><p>Rejistu de’it katak servisu simu pedidu ba revizaun.</p><button class="btn secondary" data-action="ack-emergency" data-id="${request.key}" type="button">${stageIndex > 0 ? 'Pedidu simu ona' : 'Konfirma pedidu simu'}</button></div></div><div class="emergency-workflow-stage"><span class="step-badge">2</span><div><strong>Rejista dalan koordenasaun</strong><div class="emergency-form-grid"><label class="form-field"><span>Dalan</span><select id="emergencyPathway">${pathwayOptions.map((option) => `<option ${option === pathway ? 'selected' : ''}>${option}</option>`).join('')}</select></label><label class="form-field"><span>Pasu tuir mai</span><select id="emergencyNextStep">${nextStepOptions.map((option) => `<option ${option === nextStep ? 'selected' : ''}>${option}</option>`).join('')}</select></label></div><button class="btn secondary" data-action="record-emergency-action" data-id="${request.key}" type="button">Rejista aksaun</button></div></div><div class="emergency-workflow-stage"><span class="step-badge">3</span><div><strong>Fahe resposta ba komunidade</strong><div class="template-row"><button class="response-type" data-action="fill-emergency-template" data-id="${request.key}" data-template="received" type="button">Pedidu simu</button><button class="response-type" data-action="fill-emergency-template" data-id="${request.key}" data-template="pathway" type="button">Dalan ofisiál</button><button class="response-type" data-action="fill-emergency-template" data-id="${request.key}" data-template="more-info" type="button">Presiza informasaun</button></div><textarea id="emergencyResponseMessage" placeholder="Hakerek resposta ne’ebé servisu bele konfirma...">${h(request.response || '')}</textarea><div class="emergency-response-footer"><span>Komunidade sei haree resposta no estadu ikus.</span><button class="btn primary" data-action="share-emergency-response" data-id="${request.key}" type="button">Fahe resposta <span class="arrow">→</span></button></div></div></div></div></details>`;
+  return `<details class="service-response-details emergency-response-details" id="serviceResponseComposer"><summary>Fahe resposta</summary><div class="service-response-details-body"><h3>Fahe resposta ba komunidade</h3><label class="service-form-label" for="emergencyResponseKind">Kategoria resposta</label><select id="emergencyResponseKind" class="service-response-select"><option value="received" ${request.emergencyResponseKind === 'received' ? 'selected' : ''}>Pedidu simu</option><option value="pathway" ${request.emergencyResponseKind === 'pathway' ? 'selected' : ''}>Dalan ofisiál</option><option value="more-info" ${request.emergencyResponseKind === 'more-info' ? 'selected' : ''}>Presiza informasaun liután</option></select><label class="service-form-label" for="emergencyResponseMessage">Mensajen ba komunidade</label><textarea id="emergencyResponseMessage" rows="5" placeholder="Hakerek resposta ne’ebé servisu bele konfirma...">${h(request.response || '')}</textarea><div class="service-response-submit"><button class="btn primary" data-action="share-emergency-response" data-id="${request.key}" type="button">Fahe resposta <span class="arrow">→</span></button></div><details class="emergency-coordination-details"><summary>Aksaun koordenasaun</summary><div class="emergency-coordination-body"><button class="btn secondary" data-action="ack-emergency" data-id="${request.key}" type="button">Konfirma pedidu simu</button><div class="emergency-form-grid"><label class="form-field"><span>Dalan</span><select id="emergencyPathway">${pathwayOptions.map((option) => `<option ${option === pathway ? 'selected' : ''}>${option}</option>`).join('')}</select></label><label class="form-field"><span>Pasu tuir mai</span><select id="emergencyNextStep">${nextStepOptions.map((option) => `<option ${option === nextStep ? 'selected' : ''}>${option}</option>`).join('')}</select></label></div><button class="btn secondary" data-action="record-emergency-action" data-id="${request.key}" type="button">Rejista aksaun</button></div></details></div></details>`;
 }
 
 function renderEmergencyDetail(request) {
@@ -1537,6 +1536,15 @@ document.addEventListener('click', (event) => {
 });
 
 document.addEventListener('change', (event) => {
+  if (event.target.id === 'serviceResponseKind') {
+    state.responseKind = event.target.value;
+    return;
+  }
+  if (event.target.id === 'emergencyResponseKind') {
+    const request = getRequest(state.selectedRequest);
+    if (request) request.emergencyResponseKind = event.target.value;
+    return;
+  }
   if (event.target.name !== 'requesterType') return;
   const form = event.target.form;
   if (!form) return;
